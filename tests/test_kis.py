@@ -87,3 +87,41 @@ def test_provider_error_never_uses_payload_as_error_message():
         assert "TEST_SECRET" not in str(failure.value)
     finally:
         client.close()
+
+
+def stock_price_handler(requests, first_code):
+    tokens = iter(["TOKEN_1", "TOKEN_2"])
+
+    def handler(request):
+        requests.append(request)
+        if request.url.path == "/oauth2/tokenP":
+            return httpx.Response(200, json={"access_token": next(tokens)})
+        if sum(r.url.path != "/oauth2/tokenP" for r in requests) == 1:
+            return httpx.Response(200, json={"rt_cd": "1", "msg_cd": first_code})
+        return httpx.Response(200, json={"rt_cd": "0", "output": {
+            "stck_shrn_iscd": "005930", "mrkt_warn_cls_code": "00", "mang_issu_cls_code": "N"}})
+    return handler
+
+
+def test_per_second_limit_retries_without_issuing_a_new_token():
+    # EGW00201 = 초당 호출 초과. 토큰은 하루 1회 발급 원칙이라 버리면 안 된다.
+    requests = []
+    client = client_for(stock_price_handler(requests, "EGW00201"))
+    try:
+        assert client.stock_elevated("005930") is False
+        assert client.stock_elevated("005930") is False  # 버린 토큰은 다음 호출에서 재발급으로 드러난다
+        assert sum(r.url.path == "/oauth2/tokenP" for r in requests) == 1
+    finally:
+        client.close()
+
+
+def test_expired_token_is_reissued_and_the_retry_uses_it():
+    requests = []
+    client = client_for(stock_price_handler(requests, "EGW00123"))
+    try:
+        assert client.stock_elevated("005930") is False
+        assert sum(r.url.path == "/oauth2/tokenP" for r in requests) == 2
+        assert requests[-1].headers["authorization"] == "Bearer TOKEN_2"
+        assert requests[-1].headers["tr_id"] == "FHKST01010100"
+    finally:
+        client.close()

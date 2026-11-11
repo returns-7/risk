@@ -37,8 +37,14 @@ class KisClient:
                 body = response.json()
                 if not isinstance(body, dict):
                     raise ValueError
-                if body.get("msg_cd") == "EGW00201":
+                code = body.get("msg_cd")
+                if code == "EGW00201":
+                    # 초당 호출 초과. 토큰은 하루 1회 발급 원칙이라 버리지 않고 쉬었다 다시 보낸다.
+                    continue
+                if code == "EGW00123" and "headers" in kwargs:
+                    # 토큰 만료: 새로 받아서 이번 재시도부터 쓴다.
                     self.token = None
+                    kwargs["headers"] = {**kwargs["headers"], "authorization": self._headers()["authorization"]}
                     continue
                 return body
             except httpx.TransportError:
