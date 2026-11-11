@@ -41,7 +41,7 @@ def load_universe(path: Path) -> dict[str, Instrument]:
                     leverage == 'true' if leverage else None, difficulty == 'true'))
         if not entries or len({e.ticker for e in entries}) != len(entries):
             raise ValueError
-        if any(not re.fullmatch(r"[0-9]{6}", e.ticker) or e.status not in ("active", "code_mismatch", "stale") for e in entries):
+        if any(not re.fullmatch(r"[0-9A-Z]{6}", e.ticker) or e.status not in ("active", "code_mismatch", "stale") for e in entries):
             raise ValueError
         return {e.ticker: e for e in entries}
     except (OSError, KeyError, ValueError) as exc:
