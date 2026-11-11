@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
-Ticker = Annotated[str, StringConstraints(pattern=r"^[0-9]{6}$", strict=True)]
+Ticker = Annotated[str, StringConstraints(pattern=r"^[0-9A-Z]{6}$", strict=True)]
 
 
 def display(value: float) -> float:

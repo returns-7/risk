@@ -146,3 +146,11 @@ def test_default_universe_declares_high_difficulty_metadata():
     assert all(len(row)==len(rows[0]) for row in rows[1:])
     loaded=load_universe(path)
     assert loaded and all(not instrument.high_difficulty for instrument in loaded.values())
+
+
+def test_universe_accepts_alphanumeric_krx_ticker(tmp_path):
+    path=tmp_path/'universe.csv'
+    path.write_text('ticker,name,status,kind\n0052D0,test,active,STOCK\n',encoding='utf-8')
+    assert '0052D0' in load_universe(path)
+    path.write_text('ticker,name,status,kind\n0052d0,test,active,STOCK\n',encoding='utf-8')
+    with pytest.raises(RiskError):load_universe(path)
