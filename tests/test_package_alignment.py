@@ -50,3 +50,12 @@ def test_mixed_valid_dates_missing_prices_and_request_order(market, lag):
     # Failed sync/reanalysis cannot make a four-session-old result usable.
     old_index=cal.sessions.index(end_b)
     assert cal.state(end_b,cal.sessions[old_index+4]) == 'EXPIRED'
+
+
+def test_ticker_schema_accepts_alphanumeric_krx_code_only_in_upper_case():
+    from pydantic import TypeAdapter, ValidationError
+    from app.schemas.risk import Ticker
+    assert TypeAdapter(Ticker).validate_python('0052D0') == '0052D0'
+    for bad in ('0052d0', '005930A', '00593'):
+        with pytest.raises(ValidationError):
+            TypeAdapter(Ticker).validate_python(bad)

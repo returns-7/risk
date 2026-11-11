@@ -125,3 +125,41 @@ def test_expired_token_is_reissued_and_the_retry_uses_it():
         assert requests[-1].headers["tr_id"] == "FHKST01010100"
     finally:
         client.close()
+
+
+def always_code_handler(requests, codes):
+    """종목 조회는 codes를 차례로(마지막 값 반복) 돌려준다. 토큰은 매번 새 값."""
+    counter = iter(range(1, 100))
+
+    def handler(request):
+        requests.append(request)
+        if request.url.path == "/oauth2/tokenP":
+            return httpx.Response(200, json={"access_token": f"TOKEN_{next(counter)}"})
+        n = sum(r.url.path != "/oauth2/tokenP" for r in requests)
+        return httpx.Response(200, json={"rt_cd": "1", "msg_cd": codes[min(n, len(codes)) - 1]})
+    return handler
+
+
+def test_token_is_reissued_at_most_once_per_request_and_repeat_expiry_is_auth_failure():
+    requests = []
+    client = client_for(always_code_handler(requests, ["EGW00123"]))
+    try:
+        with pytest.raises(RiskError) as failure:
+            client.stock_elevated("005930")
+        assert failure.value.code == "KIS_AUTH_FAILED"
+        assert sum(r.url.path == "/oauth2/tokenP" for r in requests) == 2  # 처음 1번 + 재발급 1번
+    finally:
+        client.close()
+
+
+def test_expiry_on_last_attempt_does_not_issue_a_token_it_cannot_use():
+    requests = []
+    client = client_for(always_code_handler(requests, ["EGW00201", "EGW00201", "EGW00123"]))
+    try:
+        with pytest.raises(RiskError) as failure:
+            client.stock_elevated("005930")
+        assert failure.value.code == "KIS_UNAVAILABLE"
+        assert sum(r.url.path == "/oauth2/tokenP" for r in requests) == 1
+        assert client.token is None  # 다음 호출에서 새로 받는다
+    finally:
+        client.close()

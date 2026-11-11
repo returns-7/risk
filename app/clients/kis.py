@@ -26,6 +26,7 @@ class KisClient:
         self.http.close()
 
     def _request(self, method, path, **kwargs):
+        refreshed = False
         for attempt in range(3):
             if attempt:
                 self.sleep(1.3 * attempt)
@@ -42,8 +43,13 @@ class KisClient:
                     # 초당 호출 초과. 토큰은 하루 1회 발급 원칙이라 버리지 않고 쉬었다 다시 보낸다.
                     continue
                 if code == "EGW00123" and "headers" in kwargs:
-                    # 토큰 만료: 새로 받아서 이번 재시도부터 쓴다.
+                    # 토큰 만료: 요청 하나에 최대 1번만 새로 받는다. 새 토큰도 만료라면 인증 문제다.
+                    if refreshed:
+                        raise RiskError("KIS_AUTH_FAILED", "KIS 인증에 실패했습니다.", 503)
                     self.token = None
+                    if attempt == 2:
+                        break  # 남은 재시도가 없으니 지금 받아도 못 쓴다. 다음 호출에서 받는다.
+                    refreshed = True
                     kwargs["headers"] = {**kwargs["headers"], "authorization": self._headers()["authorization"]}
                     continue
                 return body
